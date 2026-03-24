@@ -1,4 +1,4 @@
-import { diffArrays, diffWordsWithSpace } from "./node_modules/diff/libesm/index.js";
+const { diffArrays, diffWordsWithSpace } = window.Diff;
 
 const state = {
   blocks: [],
