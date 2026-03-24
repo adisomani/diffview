@@ -1,0 +1,12 @@
+{
+  "name": "diffview",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:ui": "node test-ui.mjs"
+  },
+  "dependencies": {
+    "diff": "^8.0.3",
+    "playwright": "^1.58.2"
+  }
+}

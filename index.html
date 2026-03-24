@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Diffchecker Clone</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-mark">D</div>
+          <span>Diff checker</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="editor-grid">
+        <article class="editor-pane">
+          <div class="pane-header">
+            <div>
+              <h2>Before</h2>
+            </div>
+            <button id="copy-left-button" class="icon-button" aria-label="Copy before markdown" title="Copy before markdown">⧉</button>
+          </div>
+          <textarea id="left-input" spellcheck="false" aria-label="Original markdown"></textarea>
+        </article>
+
+        <article class="editor-pane">
+          <div class="pane-header">
+            <div>
+              <h2>After</h2>
+            </div>
+            <button id="copy-right-button" class="icon-button" aria-label="Copy after markdown" title="Copy after markdown">⧉</button>
+          </div>
+          <textarea id="right-input" spellcheck="false" aria-label="Changed markdown"></textarea>
+        </article>
+      </section>
+
+      <section class="results-shell">
+        <div class="diff-table-head">
+          <div>Original</div>
+          <div>Changed</div>
+        </div>
+
+        <div id="diff-container" class="diff-table"></div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
