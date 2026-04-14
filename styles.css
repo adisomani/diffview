@@ -68,6 +68,30 @@ textarea {
   background: linear-gradient(135deg, #5ea0ff, #1e66f5);
 }
 
+.topbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fbff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.topbar-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.topbar-button:focus-visible {
+  outline: 2px solid rgba(94, 160, 255, 0.95);
+  outline-offset: 2px;
+}
+
 .editor-grid {
   display: flex;
   gap: 12px;
@@ -289,5 +313,9 @@ textarea {
   .topbar-inner {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .topbar-button {
+    width: 100%;
   }
 }

@@ -3,6 +3,7 @@ const { diffArrays, diffWordsWithSpace } = window.Diff;
 const state = {
   blocks: [],
   activeBlockIndex: null,
+  cellHistory: new Map(),
 };
 
 const elements = {
@@ -11,6 +12,7 @@ const elements = {
   diffContainer: document.querySelector("#diff-container"),
   copyLeftButton: document.querySelector("#copy-left-button"),
   copyRightButton: document.querySelector("#copy-right-button"),
+  swapViewButton: document.querySelector("#swap-view-button"),
 };
 
 function splitLines(text) {
@@ -371,10 +373,10 @@ function renderRow(row, blockIndex, rowIndex) {
   return `
     <div class="diff-row">
       <div class="diff-cell">
-        <div class="line-content ${leftClass}" contenteditable="true" data-side="left" data-block-index="${blockIndex}" data-row-index="${rowIndex}">${diffMarkup(row.leftText, row.rightText, "left")}</div>
+        <div class="line-content ${leftClass}" contenteditable="true" data-side="left" data-block-index="${blockIndex}" data-row-index="${rowIndex}" data-line-no="${row.leftLineNo}">${diffMarkup(row.leftText, row.rightText, "left")}</div>
       </div>
       <div class="diff-cell">
-        <div class="line-content ${rightClass}" contenteditable="true" data-side="right" data-block-index="${blockIndex}" data-row-index="${rowIndex}">${diffMarkup(row.leftText, row.rightText, "right")}</div>
+        <div class="line-content ${rightClass}" contenteditable="true" data-side="right" data-block-index="${blockIndex}" data-row-index="${rowIndex}" data-line-no="${row.rightLineNo}">${diffMarkup(row.leftText, row.rightText, "right")}</div>
       </div>
     </div>
   `;
@@ -399,31 +401,91 @@ function renderBlock(block, blockIndex) {
   `;
 }
 
-function handleRowEdit(event) {
-  const side = event.currentTarget.dataset.side;
-  const blockIndex = Number(event.currentTarget.dataset.blockIndex);
-  const rowIndex = Number(event.currentTarget.dataset.rowIndex);
+function getCellText(node) {
+  return node.innerText.replace(/\u00a0/g, " ");
+}
+
+function getCellContext(node) {
+  const side = node.dataset.side;
+  const blockIndex = Number(node.dataset.blockIndex);
+  const lineNo = node.dataset.lineNo ? Number(node.dataset.lineNo) : null;
   const block = state.blocks[blockIndex];
-  if (!block) return;
 
-  const rows = buildRows(block.leftText, block.rightText);
-  const row = rows[rowIndex];
-  if (!row) return;
+  if (!block || lineNo === null || Number.isNaN(lineNo)) return null;
+  return { side, blockIndex, lineNo, block };
+}
 
-  const nextValue = event.currentTarget.innerText.replace(/\u00a0/g, " ");
-  if (side === "left") {
-    if (row.leftLineNo === "") return;
-    const leftLines = splitLines(block.leftText);
-    leftLines[row.leftLineNo - 1] = nextValue;
-    block.leftText = joinLines(leftLines);
+function getCellHistoryKey(node) {
+  const context = getCellContext(node);
+  if (!context) return null;
+  return `${context.blockIndex}:${context.side}:${context.lineNo}`;
+}
+
+function setCurrentCellValue(node, nextValue) {
+  const context = getCellContext(node);
+  if (!context) return false;
+
+  if (context.side === "left") {
+    const leftLines = splitLines(context.block.leftText);
+    leftLines[context.lineNo - 1] = nextValue;
+    context.block.leftText = joinLines(leftLines);
   } else {
-    if (row.rightLineNo === "") return;
-    const rightLines = splitLines(block.rightText);
-    rightLines[row.rightLineNo - 1] = nextValue;
-    block.rightText = joinLines(rightLines);
+    const rightLines = splitLines(context.block.rightText);
+    rightLines[context.lineNo - 1] = nextValue;
+    context.block.rightText = joinLines(rightLines);
   }
 
   syncInputsFromBlocks();
+  return true;
+}
+
+function handleCellFocus(event) {
+  const key = getCellHistoryKey(event.currentTarget);
+  if (!key) return;
+
+  const currentValue = getCellText(event.currentTarget);
+  const entry = state.cellHistory.get(key);
+  if (!entry || entry.values[entry.index] !== currentValue) {
+    state.cellHistory.set(key, { values: [currentValue], index: 0 });
+  }
+}
+
+function handleCellInput(event) {
+  const key = getCellHistoryKey(event.currentTarget);
+  if (!key) return;
+
+  const entry = state.cellHistory.get(key);
+  if (!entry) {
+    state.cellHistory.set(key, { values: [getCellText(event.currentTarget)], index: 0 });
+    return;
+  }
+
+  const nextValue = getCellText(event.currentTarget);
+  if (entry.values[entry.index] === nextValue) return;
+
+  entry.values = entry.values.slice(0, entry.index + 1);
+  entry.values.push(nextValue);
+  entry.index += 1;
+}
+
+function handleCellUndo(event) {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "z") return;
+  event.preventDefault();
+
+  const key = getCellHistoryKey(event.currentTarget);
+  if (!key) return;
+
+  const entry = state.cellHistory.get(key);
+  if (!entry || entry.index === 0) return;
+
+  entry.index -= 1;
+  const previousValue = entry.values[entry.index];
+  event.currentTarget.textContent = previousValue;
+  setCurrentCellValue(event.currentTarget, previousValue);
+}
+
+function handleRowEdit(event) {
+  if (!setCurrentCellValue(event.currentTarget, getCellText(event.currentTarget))) return;
   render();
 }
 
@@ -437,7 +499,17 @@ function applyBlockChoice(blockIndex, side) {
     block.rightText = block.leftText;
   }
 
+  state.cellHistory.clear();
   syncInputsFromBlocks();
+  render();
+}
+
+function swapView() {
+  const previousLeftValue = elements.leftInput.value;
+  elements.leftInput.value = elements.rightInput.value;
+  elements.rightInput.value = previousLeftValue;
+  state.activeBlockIndex = null;
+  state.cellHistory.clear();
   render();
 }
 
@@ -450,6 +522,9 @@ function render() {
   elements.diffContainer.innerHTML = state.blocks.map((block, index) => renderBlock(block, index)).join("");
 
   document.querySelectorAll("[data-row-index]").forEach((node) => {
+    node.addEventListener("focus", handleCellFocus);
+    node.addEventListener("input", handleCellInput);
+    node.addEventListener("keydown", handleCellUndo);
     node.addEventListener("blur", handleRowEdit);
   });
 
@@ -463,11 +538,37 @@ function render() {
   });
 }
 
+function getChangedBlockIndexes() {
+  return state.blocks.flatMap((block, index) => (block.changed ? [index] : []));
+}
+
+function scrollToBlock(blockIndex) {
+  const block = document.querySelector(`[data-block-wrapper="${blockIndex}"]`);
+  block?.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
 function setActiveBlock(blockIndex) {
   state.activeBlockIndex = blockIndex;
   document.querySelectorAll("[data-block-wrapper]").forEach((node) => {
     node.classList.toggle("active", Number(node.dataset.blockWrapper) === blockIndex);
   });
+}
+
+function navigateDiff(direction) {
+  const changedBlockIndexes = getChangedBlockIndexes();
+  if (!changedBlockIndexes.length) return;
+
+  let nextBlockIndex;
+  if (direction > 0) {
+    nextBlockIndex = changedBlockIndexes.find((index) => index > state.activeBlockIndex);
+    if (nextBlockIndex === undefined) nextBlockIndex = changedBlockIndexes[0];
+  } else {
+    nextBlockIndex = [...changedBlockIndexes].reverse().find((index) => index < state.activeBlockIndex);
+    if (nextBlockIndex === undefined) nextBlockIndex = changedBlockIndexes[changedBlockIndexes.length - 1];
+  }
+
+  setActiveBlock(nextBlockIndex);
+  scrollToBlock(nextBlockIndex);
 }
 
 async function copyText(button, text) {
@@ -481,8 +582,15 @@ async function copyText(button, text) {
 
 elements.copyLeftButton.addEventListener("click", () => copyText(elements.copyLeftButton, elements.leftInput.value));
 elements.copyRightButton.addEventListener("click", () => copyText(elements.copyRightButton, elements.rightInput.value));
-elements.leftInput.addEventListener("input", render);
-elements.rightInput.addEventListener("input", render);
+elements.swapViewButton.addEventListener("click", swapView);
+elements.leftInput.addEventListener("input", () => {
+  state.cellHistory.clear();
+  render();
+});
+elements.rightInput.addEventListener("input", () => {
+  state.cellHistory.clear();
+  render();
+});
 
 elements.diffContainer.addEventListener("mousedown", (event) => {
   if (event.target.closest(".arrow-button")) return;
@@ -512,6 +620,14 @@ document.addEventListener("click", (event) => {
   if (state.activeBlockIndex !== null) {
     setActiveBlock(null);
   }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.ctrlKey || event.metaKey || event.shiftKey || !event.altKey) return;
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+
+  event.preventDefault();
+  navigateDiff(event.key === "ArrowDown" ? 1 : -1);
 });
 
 elements.leftInput.value = "";
